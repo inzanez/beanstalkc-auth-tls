@@ -8,7 +8,7 @@ use crate::async_impl::job::Job;
 use tokio::io::BufStream;
 use tokio::net::TcpStream;
 use crate::async_impl::request::Request;
-use crate::async_impl::response::Response;
+use crate::response::Response;
 
 /// `Beanstalkc` provides beanstalkd client operations.
 #[derive(Debug)]

@@ -5,7 +5,7 @@ use crate::error::{BeanstalkcError, BeanstalkcResult};
 use tokio::io::BufStream;
 use tokio::net::TcpStream;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
-use crate::async_impl::response::Response;
+use crate::response::Response;
 
 #[derive(Debug)]
 pub struct Request<'b> {
