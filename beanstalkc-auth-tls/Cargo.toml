@@ -1,0 +1,30 @@
+[package]
+name = "beanstalk-auth-tls"
+version = "0.1.0"
+authors = ["Inzanez <r.aggeler@gmx.net>"]
+edition = "2018"
+readme = "README.md"
+description = "Beanstalk client in Rust that allows authenticated connections to beanstalkd with optional TLS."
+homepage = "https://github.com/inzanez/beanstalkc-auth-tls"
+repository = "https://github.com/inzanez/beanstalkc-auth-tls"
+keywords = ["beanstalkd", "beanstalkc", "beanstalkc-rust", "queue", "beanstalk", "tls", "authentication"]
+categories = ["network-programming"]
+license = "MIT"
+
+[lib]
+name = "beanstalk_auth_tls"
+path = "src/lib.rs"
+
+[features]
+default = []
+async = [ "tokio" ]
+
+[dependencies]
+tokio = { version = "0.3.4", features = ["sync", "macros", "stream", "rt-multi-thread", "net", "time", "process", "io-util", "io-std"], optional = true }
+
+bufstream = "0.1.4"
+serde = "^1.0"
+serde_yaml = "^0.8"
+
+[dev-dependencies]
+flate2 = "1.0.17"
