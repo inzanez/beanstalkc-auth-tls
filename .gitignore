@@ -1,0 +1,7 @@
+/target
+.idea
+Cargo.lock
+fontconfig
+output/
+build/.openssl
+*/target
