@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "proxy",
+    "beanstalkc-auth-tls"
+]
