@@ -56,5 +56,9 @@ impl From<Utf8Error> for BeanstalkcError {
         BeanstalkcError::UnexpectedResponse(err.to_string())
     }
 }
+#[cfg(feature="native-tls")]
+impl From<tokio_native_tls::native_tls::Error> for BeanstalkcError {
+    fn from(err: tokio_native_tls::native_tls::Error) -> Self { BeanstalkcError::UnexpectedResponse(err.to_string()) }
+}
 
 pub type BeanstalkcResult<T> = Result<T, BeanstalkcError>;

@@ -2,18 +2,17 @@ use std::str::FromStr;
 
 use crate::command::Status;
 use crate::error::{BeanstalkcError, BeanstalkcResult};
-use tokio::io::BufStream;
-use tokio::net::TcpStream;
+use tokio::io::{BufStream, AsyncWrite};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use crate::response::Response;
 
 #[derive(Debug)]
-pub struct Request<'b> {
-    stream: &'b mut BufStream<TcpStream>,
+pub struct Request<'b, T> {
+    stream: &'b mut BufStream<T>,
 }
 
-impl<'b> Request<'b> {
-    pub fn new(stream: &'b mut BufStream<TcpStream>) -> Self {
+impl<'b, T: AsyncWrite + AsyncReadExt + std::marker::Unpin> Request<'b, T> {
+    pub fn new(stream: &'b mut BufStream<T>) -> Self {
         Request { stream }
     }
 

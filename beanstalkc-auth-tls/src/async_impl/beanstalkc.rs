@@ -1,14 +1,18 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
+use crate::async_impl::job::Job;
 use crate::command;
 use crate::config::*;
 use crate::error::{BeanstalkcError, BeanstalkcResult};
-use crate::async_impl::job::Job;
 use tokio::io::BufStream;
 use tokio::net::TcpStream;
+
 use crate::async_impl::request::Request;
 use crate::response::Response;
+
+#[cfg(feature = "native-tls")]
+use tokio_native_tls::native_tls::TlsConnector;
 
 /// `Beanstalkc` provides beanstalkd client operations.
 #[derive(Debug)]
@@ -17,6 +21,8 @@ pub struct Beanstalkc {
     port: u16,
     connection_timeout: Option<Duration>,
     stream: Option<BufStream<TcpStream>>,
+    #[cfg(feature = "native-tls")]
+    ssl_stream: Option<BufStream<tokio_native_tls::TlsStream<TcpStream>>>,
 }
 
 impl Beanstalkc {
@@ -28,6 +34,8 @@ impl Beanstalkc {
             port: DEFAULT_PORT,
             connection_timeout: DEFAULT_CONNECTION_TIMEOUT,
             stream: None,
+            #[cfg(feature = "native-tls")]
+            ssl_stream: None,
         }
     }
 
@@ -105,9 +113,26 @@ impl Beanstalkc {
     /// ```
     pub async fn connect(mut self) -> BeanstalkcResult<Self> {
         let addr = format!("{}:{}", self.host, self.port);
-        let tcp_stream =  TcpStream::connect(&addr).await?;
+        let tcp_stream = TcpStream::connect(&addr).await?;
 
         self.stream = Some(BufStream::new(tcp_stream));
+        Ok(self)
+    }
+
+    #[cfg(feature = "native-tls")]
+    pub async fn connect_tls(mut self, validate_cert: bool) -> BeanstalkcResult<Self> {
+        let addr = format!("{}:{}", self.host, self.port);
+        let tcp_stream = TcpStream::connect(&addr).await?;
+
+        let cx = TlsConnector::builder()
+            .danger_accept_invalid_certs(validate_cert)
+            .build()?;
+
+        let cx = tokio_native_tls::TlsConnector::from(cx);
+
+        self.ssl_stream = Some(BufStream::new(
+            cx.connect("flying eagle", tcp_stream).await?,
+        ));
         Ok(self)
     }
 
@@ -149,7 +174,8 @@ impl Beanstalkc {
             DEFAULT_JOB_PRIORITY,
             DEFAULT_JOB_DELAY,
             DEFAULT_JOB_TTR,
-        ).await
+        )
+        .await
     }
 
     /// Put a job into the current tube and return the job id.
@@ -176,7 +202,8 @@ impl Beanstalkc {
         delay: Duration,
         ttr: Duration,
     ) -> BeanstalkcResult<u64> {
-        self.send(command::put(body, priority, delay, ttr)).await
+        self.send(command::put(body, priority, delay, ttr))
+            .await
             .and_then(|r| r.job_id())
     }
 
@@ -224,15 +251,18 @@ impl Beanstalkc {
     ///
     /// job.delete().unwrap();
     /// ```
-    pub async fn reserve_with_timeout<'a>(&'a mut self, timeout: Duration) -> BeanstalkcResult<Job<'a>> {
+    pub async fn reserve_with_timeout<'a>(
+        &'a mut self,
+        timeout: Duration,
+    ) -> BeanstalkcResult<Job<'a>> {
         let resp = self.send(command::reserve(Some(timeout))).await?;
 
-            Ok(Job::new(
-                self,
-                resp.job_id()?,
-                Vec::from(resp.body.unwrap_or_default()),
-                true,
-            ))
+        Ok(Job::new(
+            self,
+            resp.job_id()?,
+            Vec::from(resp.body.unwrap_or_default()),
+            true,
+        ))
     }
 
     /// Kick at most `bound` jobs into the ready queue.
@@ -247,7 +277,8 @@ impl Beanstalkc {
     /// assert_eq!(10, conn.kick(10).unwrap());
     /// ```
     pub async fn kick(&mut self, bound: u32) -> BeanstalkcResult<u64> {
-        self.send(command::kick(bound)).await
+        self.send(command::kick(bound))
+            .await
             .and_then(|r| r.get_int_param(0))
     }
 
@@ -333,7 +364,7 @@ impl Beanstalkc {
         self.do_peek(command::peek_buried()).await
     }
 
-    pub async fn do_peek<'a>(&'a mut self, cmd: command::Command<'_>) -> BeanstalkcResult<Job<'a>>{
+    pub async fn do_peek<'a>(&'a mut self, cmd: command::Command<'_>) -> BeanstalkcResult<Job<'a>> {
         let resp = self.send(cmd).await?;
         Ok(Job::new(
             self,
@@ -372,7 +403,9 @@ impl Beanstalkc {
     /// assert_eq!("default".to_string(), tube);
     /// ```
     pub async fn using(&mut self) -> BeanstalkcResult<String> {
-        self.send(command::using()).await.and_then(|r| r.get_param(0))
+        self.send(command::using())
+            .await
+            .and_then(|r| r.get_param(0))
     }
 
     /// Use a given tube.
@@ -388,7 +421,8 @@ impl Beanstalkc {
     /// assert_eq!("jobs".to_string(), tube);
     /// ```
     pub async fn use_tube(&mut self, name: &str) -> BeanstalkcResult<String> {
-        self.send(command::use_tube(name)).await
+        self.send(command::use_tube(name))
+            .await
             .and_then(|r| r.get_param(0))
     }
 
@@ -421,7 +455,8 @@ impl Beanstalkc {
     /// assert_eq!(2, watched_count);
     /// ```
     pub async fn watch(&mut self, name: &str) -> BeanstalkcResult<u64> {
-        self.send(command::watch(name)).await
+        self.send(command::watch(name))
+            .await
             .and_then(|r| r.get_int_param(0))
     }
 
@@ -436,7 +471,8 @@ impl Beanstalkc {
     /// conn.ignore("foo").unwrap();
     /// ```
     pub async fn ignore(&mut self, name: &str) -> BeanstalkcResult<u64> {
-        self.send(command::ignore(name)).await
+        self.send(command::ignore(name))
+            .await
             .and_then(|r| r.get_int_param(0))
     }
 
@@ -482,7 +518,9 @@ impl Beanstalkc {
     /// conn.pause_tube("default", Duration::from_secs(100));
     /// ```
     pub async fn pause_tube(&mut self, name: &str, delay: Duration) -> BeanstalkcResult<()> {
-        self.send(command::pause_tube(name, delay)).await.map(|_| ())
+        self.send(command::pause_tube(name, delay))
+            .await
+            .map(|_| ())
     }
 
     /// Delete job by job id.
@@ -516,7 +554,8 @@ impl Beanstalkc {
     /// conn.release_default(1).unwrap();
     /// ```
     pub async fn release_default(&mut self, job_id: u64) -> BeanstalkcResult<()> {
-        self.release(job_id, DEFAULT_JOB_PRIORITY, DEFAULT_JOB_DELAY).await
+        self.release(job_id, DEFAULT_JOB_PRIORITY, DEFAULT_JOB_DELAY)
+            .await
     }
 
     /// Release a reserved job back into the ready queue.
@@ -531,8 +570,14 @@ impl Beanstalkc {
     ///
     /// conn.release(1, 0, Duration::from_secs(10)).unwrap();
     /// ```
-    pub async fn release(&mut self, job_id: u64, priority: u32, delay: Duration) -> BeanstalkcResult<()> {
-        self.send(command::release(job_id, priority, delay)).await
+    pub async fn release(
+        &mut self,
+        job_id: u64,
+        priority: u32,
+        delay: Duration,
+    ) -> BeanstalkcResult<()> {
+        self.send(command::release(job_id, priority, delay))
+            .await
             .map(|_| ())
     }
 
@@ -605,8 +650,23 @@ impl Beanstalkc {
             ));
         }
 
-        let mut request = Request::new(self.stream.as_mut().unwrap());
+        let resp: Response;
         let message = cmd.build();
+
+        // TLS or not? If TLS feature is active, we may still use non-TLS connections
+        #[cfg(feature = "native-tls")]
+        if self.ssl_stream.is_none() {
+            let mut request = Request::new(self.stream.as_mut().unwrap());
+
+            resp = request.send(message.as_bytes()).await?;
+        } else {
+            let mut request = Request::new(self.ssl_stream.as_mut().unwrap());
+            resp = request.send(message.as_bytes()).await?;
+        }
+
+        #[cfg(not(feature = "native-tls"))]
+        let mut request = Request::new(self.stream.as_mut().unwrap());
+        #[cfg(not(feature = "native-tls"))]
         let resp = request.send(message.as_bytes()).await?;
 
         if cmd.expected_ok_status.contains(&resp.status) {
