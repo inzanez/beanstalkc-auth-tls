@@ -1,16 +1,16 @@
-use native_tls::Identity;
-use http::{header::HeaderValue, Request, Response, StatusCode};
-use tokio::io;
 use bytes::BytesMut;
-use tokio_util::codec::{Decoder, Encoder, Framed};
-use std::fmt;
-use tokio::prelude::*;
-use tokio::net::{TcpListener, TcpStream};
-use std::error::Error;
-use tokio::stream::StreamExt;
 use futures::SinkExt;
+use http::{header::HeaderValue, Request, Response, StatusCode};
+use native_tls::Identity;
+use std::error::Error;
+use std::fmt;
+use tokio::io;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::prelude::*;
+use tokio::stream::StreamExt;
+use tokio_util::codec::{Decoder, Encoder, Framed};
 
-pub(crate) async fn start_plain(listen_addr: &str, beanstalk: &str,) -> Result<(), Box<dyn Error>> {
+pub(crate) async fn start_plain(listen_addr: &str, beanstalk: &str) -> Result<(), Box<dyn Error>> {
     let server = TcpListener::bind(&listen_addr).await?;
     println!("Listening on: {}", listen_addr);
 
@@ -26,7 +26,11 @@ pub(crate) async fn start_plain(listen_addr: &str, beanstalk: &str,) -> Result<(
     }
 }
 
-pub(crate) async fn start_tls(listen_addr: &str, pkcs12: Identity, beanstalk: &str) -> Result<(), Box<dyn Error>> {
+pub(crate) async fn start_tls(
+    listen_addr: &str,
+    pkcs12: Identity,
+    beanstalk: &str,
+) -> Result<(), Box<dyn Error>> {
     let server = TcpListener::bind(&listen_addr).await?;
     println!("Listening on: {}", listen_addr);
 
@@ -90,7 +94,10 @@ async fn process_plain(stream: TcpStream, beanstalk: String) -> Result<(), Box<d
 
 /// Process every request submitted. It will only ever process `Upgrade` requests, everything else will
 /// return `501/NOT_IMPLEMENTED`.
-async fn process_tls(stream: tokio_native_tls::TlsStream<TcpStream>, beanstalk: String) -> Result<(), Box<dyn Error>> {
+async fn process_tls(
+    stream: tokio_native_tls::TlsStream<TcpStream>,
+    beanstalk: String,
+) -> Result<(), Box<dyn Error>> {
     let mut transport = Framed::new(stream, Http);
     let mut destination: Option<TcpStream> = None;
 
@@ -155,10 +162,7 @@ async fn upgrade(req: Request<()>, beanstalk: &str) -> Result<Option<TcpStream>,
 /// Proxies requests between an encrypted `TlsStream` from the client and the destination `TcpStream`
 /// which doesn't use TLS. This allows the client-side to use TLS right up to this proxy server
 /// which will break the TLS connection and talk to `beanstalkd` over an unencrypted TCP connection.
-async fn proxy_plain(
-    source: TcpStream,
-    destination: TcpStream,
-) -> Result<(), Box<dyn Error>> {
+async fn proxy_plain(source: TcpStream, destination: TcpStream) -> Result<(), Box<dyn Error>> {
     let (mut src_reader, mut src_writer) = source.into_split();
     let (mut dst_reader, mut dst_writer) = destination.into_split();
 
@@ -176,7 +180,6 @@ async fn proxy_plain(
 
     Ok(())
 }
-
 
 /// Proxies requests between an encrypted `TlsStream` from the client and the destination `TcpStream`
 /// which doesn't use TLS. This allows the client-side to use TLS right up to this proxy server
@@ -225,7 +228,7 @@ impl Encoder<Response<String>> for Http {
             item.body().len(),
             time::at(time::get_time()).rfc822(),
         )
-            .unwrap();
+        .unwrap();
 
         for (k, v) in item.headers() {
             dst.extend_from_slice(k.as_str().as_bytes());

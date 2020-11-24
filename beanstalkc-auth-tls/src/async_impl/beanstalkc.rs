@@ -5,12 +5,14 @@ use crate::async_impl::job::Job;
 use crate::command;
 use crate::config::*;
 use crate::error::{BeanstalkcError, BeanstalkcResult};
-use tokio::io::BufStream;
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufStream};
 use tokio::net::TcpStream;
 
 use crate::async_impl::request::Request;
 use crate::response::Response;
 
+use std::error::Error;
+use std::str::FromStr;
 #[cfg(feature = "native-tls")]
 use tokio_native_tls::native_tls::TlsConnector;
 
@@ -117,6 +119,85 @@ impl Beanstalkc {
 
         self.stream = Some(BufStream::new(tcp_stream));
         Ok(self)
+    }
+
+    #[cfg(feature = "http-auth")]
+    pub async fn http_req(&mut self, req: http::Request<String>) {
+        let stream = self.stream.as_mut().unwrap();
+
+        crate::async_impl::http::write_request(stream, &req)
+            .await
+            .unwrap();
+
+        stream.flush().await;
+
+        let mut resp = "".to_string();
+
+        loop {
+            let mut data = vec![];
+            let read = stream.read_buf(&mut data);
+            let x = tokio::time::timeout(tokio::time::Duration::from_millis(10), read).await;
+
+            if let Err(e) = x {
+                break;
+            } else {
+                resp.push_str(&String::from_utf8(data).expect("Could not parse answer"))
+            }
+        }
+
+        if !resp.contains("101 Switching Protocols") {
+            println!("ERR");
+        }
+    }
+
+    #[cfg(feature = "http-auth")]
+    pub async fn http_req_tls(
+        &mut self,
+        req: http::Request<String>,
+    ) -> Result<http::Response<String>, Box<dyn Error>> {
+        let stream = self.ssl_stream.as_mut().unwrap();
+
+        crate::async_impl::http::write_request(stream, &req)
+            .await
+            .unwrap();
+
+        stream.flush().await;
+
+        let mut resp = "".to_string();
+
+        loop {
+            let mut data = vec![];
+            let read = stream.read_buf(&mut data);
+            let x = tokio::time::timeout(tokio::time::Duration::from_secs(1), read).await;
+
+            if let Err(e) = x {
+                break;
+            } else {
+                let x = x.unwrap().unwrap();
+
+                if x == 0 {
+                    break;
+                }
+
+                resp.push_str(&String::from_utf8(data).expect("Could not parse answer"));
+            }
+        }
+
+        let mut headers = [httparse::EMPTY_HEADER; 16];
+        let mut r = httparse::Response::new(&mut headers);
+        let status = r.parse(resp.as_bytes())?;
+        let body = resp.split_at(status.unwrap()).1;
+
+        let mut resp = http::Response::builder().status(r.code.unwrap_or_default());
+
+        for h in r.headers.iter() {
+            resp = resp.header(
+                http::header::HeaderName::from_str(h.name).unwrap(),
+                http::HeaderValue::from_bytes(h.value).unwrap(),
+            );
+        }
+
+        Ok(resp.body(body.to_string()).unwrap())
     }
 
     #[cfg(feature = "native-tls")]

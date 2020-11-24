@@ -43,6 +43,7 @@
 pub use crate::beanstalkc::Beanstalkc;
 pub use crate::error::{BeanstalkcError, BeanstalkcResult};
 pub use crate::job::Job;
+pub use http;
 
 #[cfg(feature = "async")]
 pub mod async_impl;

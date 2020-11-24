@@ -2,9 +2,9 @@ use std::str::FromStr;
 
 use crate::command::Status;
 use crate::error::{BeanstalkcError, BeanstalkcResult};
-use tokio::io::{BufStream, AsyncWrite};
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 use crate::response::Response;
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncWrite, BufStream};
 
 #[derive(Debug)]
 pub struct Request<'b, T> {
